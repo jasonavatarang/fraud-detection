@@ -33,7 +33,7 @@ I was hacked through my robhinhood brokerage account by someone with an ip adres
 * react
 * redis
 * kubernetes
-* apache spark
+* redis
 * hadoop
 
 # data models
