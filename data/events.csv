@@ -1,0 +1,14 @@
+event_id,user_id,event_type,timestamp,ip_address,location,device_id,amount,status
+1,1001,login_failed,2026-04-01T08:00:00,192.168.1.10,Miami,device_a,0,failed
+2,1001,login_failed,2026-04-01T08:05:00,192.168.1.10,Miami,device_a,0,failed
+3,1001,login_failed,2026-04-01T08:10:00,192.168.1.10,Miami,device_a,0,failed
+4,1001,password_reset,2026-04-01T08:20:00,192.168.1.10,Miami,device_a,0,success
+5,1001,withdrawal,2026-04-01T08:35:00,203.0.113.25,New York,device_x,5000,success
+6,1002,login_success,2026-04-01T09:00:00,10.0.0.2,Austin,device_b,0,success
+7,1002,trade,2026-04-01T09:10:00,10.0.0.2,Austin,device_b,1200,success
+8,1003,mfa_disabled,2026-04-01T10:00:00,172.16.0.8,Chicago,device_c,0,success
+9,1003,profile_change,2026-04-01T10:05:00,172.16.0.8,Chicago,device_c,0,success
+10,1004,login_success,2026-04-01T11:00:00,198.51.100.20,Seattle,device_d,0,success
+11,1004,withdrawal,2026-04-01T11:15:00,198.51.100.20,Seattle,device_d,200,success
+12,1005,login_success,2026-04-01T12:00:00,198.51.100.40,Boston,device_e,0,success
+13,1005,withdrawal,2026-04-01T12:10:00,198.51.100.40,Boston,device_e,15000,success

@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: fraud-db
+    environment:
+      POSTGRES_DB: frauddb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d frauddb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  spark-job:
+    image: python:3.11-slim
+    container_name: fraud-spark-job
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./processing:/app/processing
+      - ./data:/app/data
+      - ./.env:/app/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "apt-get update &&
+               apt-get install -y bash default-jdk wget procps &&
+               pip install --no-cache-dir -r processing/requirements.txt &&
+               python processing/spark_job.py"
+
+  api:
+    image: python:3.11-slim
+    container_name: fraud-api
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./api:/app/api
+      - ./.env:/app/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      spark-job:
+        condition: service_completed_successfully
+    command: >
+      bash -c "pip install --no-cache-dir -r api/requirements.txt &&
+               uvicorn api.main:app --host 0.0.0.0 --port 8000"

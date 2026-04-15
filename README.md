@@ -61,3 +61,25 @@ Login from a new location and a new device: medium/high risk
 ## Rule 5
 Withdrawal over threshold: medium risk (higher if combined with new device/location)
 
+# Phase 1
+
+## overview
+This pahse ingests raw account activity events, transforms them into user level risk features, computes a rule based risk score, stores the results in PostgreSQL, and exposes the processed insights through a FastAPI service.
+
+## Architecture
+ Raw CSV events flow through a Spark processing job, which computes user risk summaries and alert tables. These are written to PostgreSQL and served through REST endpoints.
+
+
+```
+CSV events -> PySpark -> PostgreSQL -> FastAPI
+```
+
+## features
+
+- Detect repeated failed login behavior
+- Flag password reset and large withdrawal activity
+- Compute a user level risk score
+- Return high risk users through API endpoints
+
+## Tech stack
+- Python, PySpark, PostgreSQL, FastAPI, Docker Compose
