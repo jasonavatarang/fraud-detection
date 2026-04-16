@@ -4,11 +4,41 @@ event_id,user_id,event_type,timestamp,ip_address,location,device_id,amount,statu
 3,1001,login_failed,2026-04-01T08:10:00,192.168.1.10,Miami,device_a,0,failed
 4,1001,password_reset,2026-04-01T08:20:00,192.168.1.10,Miami,device_a,0,success
 5,1001,withdrawal,2026-04-01T08:35:00,203.0.113.25,New York,device_x,5000,success
-6,1002,login_success,2026-04-01T09:00:00,10.0.0.2,Austin,device_b,0,success
-7,1002,trade,2026-04-01T09:10:00,10.0.0.2,Austin,device_b,1200,success
-8,1003,mfa_disabled,2026-04-01T10:00:00,172.16.0.8,Chicago,device_c,0,success
-9,1003,profile_change,2026-04-01T10:05:00,172.16.0.8,Chicago,device_c,0,success
-10,1004,login_success,2026-04-01T11:00:00,198.51.100.20,Seattle,device_d,0,success
-11,1004,withdrawal,2026-04-01T11:15:00,198.51.100.20,Seattle,device_d,200,success
-12,1005,login_success,2026-04-01T12:00:00,198.51.100.40,Boston,device_e,0,success
-13,1005,withdrawal,2026-04-01T12:10:00,198.51.100.40,Boston,device_e,15000,success
+6,1001,trade,2026-04-01T08:50:00,203.0.113.25,New York,device_x,2500,success
+
+7,1002,login_success,2026-04-01T09:00:00,10.0.0.2,Austin,device_b,0,success
+8,1002,trade,2026-04-01T09:10:00,10.0.0.2,Austin,device_b,1200,success
+9,1002,withdrawal,2026-04-01T09:20:00,10.0.0.2,Austin,device_b,300,success
+
+10,1003,mfa_disabled,2026-04-01T10:00:00,172.16.0.8,Chicago,device_c,0,success
+11,1003,profile_change,2026-04-01T10:05:00,172.16.0.8,Chicago,device_c,0,success
+12,1003,withdrawal,2026-04-01T10:15:00,172.16.0.8,Chicago,device_c,8000,success
+
+13,1004,login_success,2026-04-01T11:00:00,198.51.100.20,Seattle,device_d,0,success
+14,1004,withdrawal,2026-04-01T11:15:00,198.51.100.20,Seattle,device_d,200,success
+
+15,1005,login_success,2026-04-01T12:00:00,198.51.100.40,Boston,device_e,0,success
+16,1005,withdrawal,2026-04-01T12:10:00,198.51.100.40,Boston,device_e,15000,success
+
+17,1006,login_success,2026-04-01T13:00:00,203.0.113.100,Denver,device_f,0,success
+18,1006,login_success,2026-04-01T13:05:00,203.0.113.101,San Francisco,device_g,0,success
+19,1006,trade,2026-04-01T13:10:00,203.0.113.101,San Francisco,device_g,900,success
+
+20,1007,login_failed,2026-04-01T14:00:00,10.1.1.1,Atlanta,device_h,0,failed
+21,1007,login_failed,2026-04-01T14:03:00,10.1.1.1,Atlanta,device_h,0,failed
+22,1007,login_failed,2026-04-01T14:05:00,10.1.1.1,Atlanta,device_h,0,failed
+23,1007,login_failed,2026-04-01T14:07:00,10.1.1.1,Atlanta,device_h,0,failed
+
+24,1008,password_reset,2026-04-01T15:00:00,192.0.2.5,Orlando,device_i,0,success
+25,1008,withdrawal,2026-04-01T15:05:00,192.0.2.5,Orlando,device_i,6500,success
+26,1008,profile_change,2026-04-01T15:06:00,192.0.2.5,Orlando,device_i,0,success
+
+27,1009,login_success,2026-04-01T16:00:00,198.18.0.1,Los Angeles,device_j,0,success
+28,1009,login_success,2026-04-01T16:02:00,198.18.0.2,Los Angeles,device_k,0,success
+29,1009,withdrawal,2026-04-01T16:10:00,198.18.0.2,Los Angeles,device_k,2000,success
+
+30,1010,login_success,2026-04-01T17:00:00,203.0.113.55,Miami,device_l,0,success
+31,1010,trade,2026-04-01T17:02:00,203.0.113.55,Miami,device_l,300,success
+32,1010,trade,2026-04-01T17:03:00,203.0.113.55,Miami,device_l,400,success
+33,1010,trade,2026-04-01T17:04:00,203.0.113.55,Miami,device_l,250,success
+34,1010,withdrawal,2026-04-01T17:05:00,203.0.113.55,Miami,device_l,1000,success

@@ -71,7 +71,15 @@ This pahse ingests raw account activity events, transforms them into user level 
 
 
 ```
-CSV events -> PySpark -> PostgreSQL -> FastAPI
+CSV file
+   ↓
+Spark (parallel processing)
+   ↓ (via JDBC)
+Postgres (storage)
+   ↓ (via SQLAlchemy)
+FastAPI (API layer)
+   ↓ (via Uvicorn)
+Browser / client
 ```
 
 ## features
@@ -83,3 +91,37 @@ CSV events -> PySpark -> PostgreSQL -> FastAPI
 
 ## Tech stack
 - Python, PySpark, PostgreSQL, FastAPI, Docker Compose
+
+## How to run
+```
+docker compose up --build
+```
+## endpoints (port 8000)
+ - GET /
+ - GET /users
+ - GET /alerts
+ - GET /users/{user_id}
+ - /docs 
+
+ # Phase 2
+
+ * richer fraud signals
+ * statisitcs
+ * analytics endpoints
+
+ # Phase 3
+
+ - kafka proudcer/consumer
+ - stream events instead of CSV-only
+
+ # Phase 4
+ - Redis caching
+ - maybe bakcground jobs
+
+# Phase 5
+- aws deployemnt
+- s3 + hosted DB + app deployment
+
+# Phase 6
+- kubernetes deployment
+- help/ manifest ?
