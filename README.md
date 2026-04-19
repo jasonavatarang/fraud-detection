@@ -1,7 +1,6 @@
 # fraud-detection
 
-# BackStory
-I was hacked through my robhinhood brokerage account by someone with an ip adress in russia with an iphone 15 pro. I had my account froze, spent hours on call wiht robhinhood support, gone through multiple protocols to unrestrict my account. I missed out on possble opportunity cost/profit, emtionally restless wiht how safe my account really is and the unoterhox protocls needed to secure my funds. This is an attempt to solve and create a system to help prevent this.
+
 
 # Description
 ## Possible features
