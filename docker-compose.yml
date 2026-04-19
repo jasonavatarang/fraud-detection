@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16
@@ -16,25 +14,56 @@ services:
       timeout: 5s
       retries: 10
 
-  spark-job:
+  kafka:
+    image: apache/kafka:4.2.0
+    container_name: fraud-kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+
+  spark-stream-job:
     image: python:3.11-slim
-    container_name: fraud-spark-job
+    container_name: fraud-spark-stream
     working_dir: /app
-    env_file:
-      - .env
     volumes:
       - ./processing:/app/processing
-      - ./data:/app/data
-      - ./.env:/app/.env
     depends_on:
-      db:
-        condition: service_healthy
+      - kafka
     command: >
-      bash -c "apt-get update &&
+      bash -c "sleep 15 &&
+               apt-get update &&
                apt-get install -y bash default-jdk wget procps &&
                pip install --no-cache-dir -r processing/requirements.txt &&
-               python processing/spark_job.py"
+               python processing/spark_stream_job.py"
 
+  producer:
+    image: python:3.11-slim
+    container_name: fraud-producer
+    working_dir: /app
+    volumes:
+      - ./producer:/app/producer
+    depends_on:
+      - kafka
+    command: >
+      bash -c "sleep 20 &&
+               pip install --no-cache-dir -r producer/requirements.txt &&
+               python producer/send_events.py"
+
+  redis:
+    image: redis:7
+    container_name: fraud-redis
+    ports:
+      - "6379:6379"
   api:
     image: python:3.11-slim
     container_name: fraud-api
@@ -49,8 +78,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      spark-job:
-        condition: service_completed_successfully
+      redis:
+        condition: service_started
     command: >
       bash -c "pip install --no-cache-dir -r api/requirements.txt &&
                uvicorn api.main:app --host 0.0.0.0 --port 8000"
+
+    
