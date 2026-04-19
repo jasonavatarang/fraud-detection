@@ -4,7 +4,17 @@ import redis
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from sqlalchemy import create_engine, text
+from fastapi.middleware.cors import CORSMiddleware
+from decimal import Decimal
 
+def make_json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, list):
+        return [make_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {k: make_json_safe(v) for k, v in value.items()}
+    return value
 load_dotenv()
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
@@ -23,18 +33,33 @@ engine = create_engine(DATABASE_URL, future=True)
 redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
 
 app = FastAPI(title="Fraud Risk Platform - Phase 4")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_cached_or_query(cache_key, sql, params=None, ttl=10):
-    cached = redis_client.get(cache_key)
-    if cached:
-        return json.loads(cached)
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        print(f"Redis read failed for {cache_key}: {e}")
 
     with engine.connect() as conn:
         rows = conn.execute(text(sql), params or {}).mappings().all()
         result = [dict(row) for row in rows]
 
-    redis_client.setex(cache_key, ttl, json.dumps(result))
+    result = make_json_safe(result)
+
+    try:
+        redis_client.setex(cache_key, ttl, json.dumps(result))
+    except Exception as e:
+        print(f"Redis write failed for {cache_key}: {e}")
+
     return result
 
 
@@ -93,4 +118,72 @@ def get_raw_events(limit: int = 20):
         LIMIT {limit}
         """,
         ttl=5
+    )
+
+@app.get("/stats/overview")
+def stats_overview():
+    return get_cached_or_query(
+        "stats_overview",
+        """
+        SELECT
+            COUNT(*) AS total_users,
+            COALESCE(SUM(event_count), 0) AS total_events,
+            COALESCE(SUM(CASE WHEN risk_level IN ('high','critical') THEN 1 ELSE 0 END), 0) AS alerted_users,
+            COALESCE(SUM(CASE WHEN risk_level = 'critical' THEN 1 ELSE 0 END), 0) AS critical_users,
+            COALESCE(AVG(risk_score), 0) AS avg_risk_score
+        FROM user_risk_summary_stream
+        """
+    )
+
+@app.get("/stats/risk-distribution")
+def risk_distribution():
+    return get_cached_or_query(
+        "risk_distribution",
+        """
+        SELECT risk_level, COUNT(*) AS count
+        FROM user_risk_summary_stream
+        GROUP BY risk_level
+        ORDER BY count DESC
+        """
+    )
+
+@app.get("/users/{user_id}/raw-events")
+def user_raw_events(user_id: str):
+    return get_cached_or_query(
+        f"user_events_{user_id}",
+        """
+        SELECT *
+        FROM raw_events_stream
+        WHERE user_id = :user_id
+        ORDER BY timestamp DESC
+        LIMIT 20
+        """,
+        {"user_id": user_id}
+    )
+
+
+
+@app.get("/stats/top-users")
+def top_users(limit: int = 10):
+    return get_cached_or_query(
+        f"top_users_{limit}",
+        f"""
+        SELECT *
+        FROM user_risk_summary_stream
+        ORDER BY risk_score DESC
+        LIMIT {limit}
+        """
+    )
+
+
+@app.get("/stats/event-types")
+def event_types():
+    return get_cached_or_query(
+        "event_types",
+        """
+        SELECT event_type, COUNT(*) AS count
+        FROM raw_events_stream
+        GROUP BY event_type
+        ORDER BY count DESC
+        """
     )

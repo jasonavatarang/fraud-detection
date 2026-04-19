@@ -3,6 +3,7 @@ import random
 import time
 from datetime import datetime, timezone
 from kafka import KafkaProducer
+import uuid
 
 producer = KafkaProducer(
     bootstrap_servers="kafka:9093",
@@ -64,7 +65,7 @@ def generate_normal_event(user_id):
         status = "failed"
 
     return {
-        "event_id": str(random.randint(100000, 999999)),
+        "event_id": str(uuid.uuid4()),
         "user_id": user_id,
         "event_type": event_type,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -84,7 +85,7 @@ def generate_fraud_burst(user_id):
 
     events = [
         {
-            "event_id": str(random.randint(100000, 999999)),
+            "event_id": str(uuid.uuid4()),
             "user_id": user_id,
             "event_type": "login_failed",
             "timestamp": now,
@@ -95,7 +96,7 @@ def generate_fraud_burst(user_id):
             "status": "failed",
         },
         {
-            "event_id": str(random.randint(100000, 999999)),
+            "event_id": str(uuid.uuid4()),
             "user_id": user_id,
             "event_type": "login_failed",
             "timestamp": now,
@@ -106,7 +107,7 @@ def generate_fraud_burst(user_id):
             "status": "failed",
         },
         {
-            "event_id": str(random.randint(100000, 999999)),
+            "event_id": str(uuid.uuid4()),
             "user_id": user_id,
             "event_type": "password_reset",
             "timestamp": now,
@@ -117,7 +118,7 @@ def generate_fraud_burst(user_id):
             "status": "success",
         },
         {
-            "event_id": str(random.randint(100000, 999999)),
+            "event_id": str(uuid.uuid4()),
             "user_id": user_id,
             "event_type": "withdrawal",
             "timestamp": now,
