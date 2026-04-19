@@ -1,4 +1,6 @@
 import os
+import json
+import redis
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from sqlalchemy import create_engine, text
@@ -17,7 +19,23 @@ DATABASE_URL = (
 )
 
 engine = create_engine(DATABASE_URL, future=True)
-app = FastAPI(title="Fraud Risk Platform - Phase 2")
+
+redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
+
+app = FastAPI(title="Fraud Risk Platform - Phase 4")
+
+
+def get_cached_or_query(cache_key, sql, params=None, ttl=10):
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), params or {}).mappings().all()
+        result = [dict(row) for row in rows]
+
+    redis_client.setex(cache_key, ttl, json.dumps(result))
+    return result
 
 
 @app.get("/")
@@ -25,97 +43,54 @@ def root():
     return {"message": "Fraud Risk Platform API is running"}
 
 
-@app.get("/users")
-def get_users():
-    query = text("""
+@app.get("/stream/users")
+def get_stream_users():
+    return get_cached_or_query(
+        "stream_users",
+        """
         SELECT *
-        FROM user_risk_summary
+        FROM user_risk_summary_stream
         ORDER BY risk_score DESC
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query).mappings().all()
-    return [dict(row) for row in rows]
+        """
+    )
 
 
-@app.get("/alerts")
-def get_alerts():
-    query = text("""
+@app.get("/stream/alerts")
+def get_stream_alerts():
+    return get_cached_or_query(
+        "stream_alerts",
+        """
         SELECT *
-        FROM alert_users
+        FROM user_risk_summary_stream
+        WHERE risk_level IN ('high', 'critical')
         ORDER BY risk_score DESC
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query).mappings().all()
-    return [dict(row) for row in rows]
+        """
+    )
 
 
-@app.get("/users/{user_id}")
-def get_user(user_id: str):
-    query = text("""
+@app.get("/stream/users/{user_id}")
+def get_stream_user(user_id: str):
+    return get_cached_or_query(
+        f"user_{user_id}",
+        """
         SELECT *
-        FROM user_risk_summary
+        FROM user_risk_summary_stream
         WHERE user_id = :user_id
-    """)
-    with engine.connect() as conn:
-        row = conn.execute(query, {"user_id": user_id}).mappings().first()
-    return dict(row) if row else {"message": "User not found"}
+        """,
+        {"user_id": user_id},
+        ttl=5
+    )
 
 
-@app.get("/stats/overview")
-def get_overview():
-    query = text("""
+@app.get("/raw-events")
+def get_raw_events(limit: int = 20):
+    return get_cached_or_query(
+        f"raw_events_{limit}",
+        f"""
         SELECT *
-        FROM risk_overview
-    """)
-    with engine.connect() as conn:
-        row = conn.execute(query).mappings().first()
-    return dict(row) if row else {}
-
-
-@app.get("/stats/risk-distribution")
-def get_risk_distribution():
-    query = text("""
-        SELECT *
-        FROM risk_distribution
-        ORDER BY user_count DESC
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query).mappings().all()
-    return [dict(row) for row in rows]
-
-
-@app.get("/stats/top-users")
-def get_top_users(limit: int = 5):
-    query = text("""
-        SELECT *
-        FROM user_risk_summary
-        ORDER BY risk_score DESC
-        LIMIT :limit
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query, {"limit": limit}).mappings().all()
-    return [dict(row) for row in rows]
-
-
-@app.get("/stats/by-location")
-def get_by_location():
-    query = text("""
-        SELECT *
-        FROM risk_by_location
-        ORDER BY large_withdrawal_count DESC, event_count DESC
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query).mappings().all()
-    return [dict(row) for row in rows]
-
-
-@app.get("/stats/event-types")
-def get_event_types():
-    query = text("""
-        SELECT *
-        FROM event_type_summary
-        ORDER BY event_count DESC
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(query).mappings().all()
-    return [dict(row) for row in rows]
+        FROM raw_events_stream
+        ORDER BY timestamp DESC
+        LIMIT {limit}
+        """,
+        ttl=5
+    )
