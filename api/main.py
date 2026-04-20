@@ -187,3 +187,15 @@ def event_types():
         ORDER BY count DESC
         """
     )
+
+@app.get("/stats/recent-bursts")
+def recent_bursts():
+    return get_cached_or_query(
+        "recent_bursts",
+        """
+        SELECT *
+        FROM recent_burst_activity
+        WHERE burst_level IN ('medium', 'high')
+        ORDER BY burst_score DESC
+        """
+    )

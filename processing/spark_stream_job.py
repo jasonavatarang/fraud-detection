@@ -8,7 +8,8 @@ from pyspark.sql.functions import (
     when,
     count,
     sum as spark_sum,
-    max as spark_max
+    max as spark_max,
+    to_timestamp, current_timestamp, expr
 )
 from pyspark.sql.types import (
     StructType,
@@ -16,6 +17,7 @@ from pyspark.sql.types import (
     StringType,
     DoubleType
 )
+
 
 load_dotenv()
 
@@ -93,7 +95,17 @@ def ensure_tables():
             risk_level TEXT
         )
     """)
-
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS recent_burst_activity (
+            user_id TEXT PRIMARY KEY,
+            recent_event_count BIGINT,
+            recent_failed_login_count BIGINT,
+            has_recent_password_reset INT,
+            has_recent_withdrawal INT,
+            burst_score BIGINT,
+            burst_level TEXT
+        )
+    """)
     conn.commit()
     cur.close()
     conn.close()
@@ -155,6 +167,46 @@ def upsert_user_summary(rows):
     conn.close()
 
 
+def upsert_recent_bursts(rows):
+    conn = get_pg_connection()
+    cur = conn.cursor()
+
+    upsert_sql = """
+        INSERT INTO recent_burst_activity (
+            user_id,
+            recent_event_count,
+            recent_failed_login_count,
+            has_recent_password_reset,
+            has_recent_withdrawal,
+            burst_score,
+            burst_level
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+            recent_event_count = EXCLUDED.recent_event_count,
+            recent_failed_login_count = EXCLUDED.recent_failed_login_count,
+            has_recent_password_reset = EXCLUDED.has_recent_password_reset,
+            has_recent_withdrawal = EXCLUDED.has_recent_withdrawal,
+            burst_score = EXCLUDED.burst_score,
+            burst_level = EXCLUDED.burst_level
+    """
+
+    for row in rows:
+        cur.execute(upsert_sql, (
+            row["user_id"],
+            row["recent_event_count"],
+            row["recent_failed_login_count"],
+            row["has_recent_password_reset"],
+            row["has_recent_withdrawal"],
+            row["burst_score"],
+            row["burst_level"],
+        ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
 def write_to_postgres(batch_df, batch_id):
     print(f"Processing micro-batch {batch_id}...")
 
@@ -171,6 +223,7 @@ def write_to_postgres(batch_df, batch_id):
         mode="append",
         properties=JDBC_PROPERTIES,
     )
+    
 
     # 2) Recompute summaries from full raw event history
     spark = batch_df.sparkSession
@@ -178,6 +231,12 @@ def write_to_postgres(batch_df, batch_id):
         url=JDBC_URL,
         table="raw_events_stream",
         properties=JDBC_PROPERTIES,
+    )
+
+    raw_df = raw_df.withColumn("event_ts", to_timestamp(col("timestamp")))
+
+    recent_df = raw_df.filter(
+        col("event_ts") >= expr("current_timestamp() - INTERVAL 5 MINUTES")
     )
 
     enriched_raw = (
@@ -230,8 +289,38 @@ def write_to_postgres(batch_df, batch_id):
         )
     )
 
+    recent_burst_df = (
+        recent_df
+        .withColumn("recent_failed_login_flag", when(col("event_type") == "login_failed", 1).otherwise(0))
+        .withColumn("recent_password_reset_flag", when(col("event_type") == "password_reset", 1).otherwise(0))
+        .withColumn("recent_withdrawal_flag", when(col("event_type") == "withdrawal", 1).otherwise(0))
+        .groupBy("user_id")
+        .agg(
+            count("*").alias("recent_event_count"),
+            spark_sum("recent_failed_login_flag").alias("recent_failed_login_count"),
+            spark_max("recent_password_reset_flag").alias("has_recent_password_reset"),
+            spark_max("recent_withdrawal_flag").alias("has_recent_withdrawal"),
+        )
+        .withColumn(
+            "burst_score",
+            col("recent_event_count") * 5
+            + col("recent_failed_login_count") * 10
+            + col("has_recent_password_reset") * 15
+            + col("has_recent_withdrawal") * 15
+        )
+        .withColumn(
+            "burst_level",
+            when(col("burst_score") >= 35, "high")
+            .when(col("burst_score") >= 20, "medium")
+            .otherwise("low")
+        )
+    )
+
     rows = [row.asDict() for row in user_summary.collect()]
     upsert_user_summary(rows)
+
+    burst_rows = [row.asDict() for row in recent_burst_df.collect()]
+    upsert_recent_bursts(burst_rows)
 
     print(f"Finished micro-batch {batch_id}")
     user_summary.show(truncate=False)
