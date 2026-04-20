@@ -1,242 +1,398 @@
-# fraud-detection
 
+# Fraud Risk Streaming Platform
 
+A streaming fraud analytics system built with Kafka, Spark Structured Streaming, PostgreSQL, FastAPI, Redis, and React.
 
-# Description
-## Possible features
+## Overview
 
-* ingests account acitivy logs
-* process them with PySpark
-* computes a risk score
-* stores resutls in Postgres
-* exposes alerts thorugh FastAPI
-* possibly add kafk, ml anomaly detection, dashboard
+This project simulates account activity events, processes them as a live stream, computes user-level fraud risk, stores both raw and summarized data, and exposes operational analytics through APIs and a dashboard.
 
-## what system should detect
-* login from new IP
-* login from new location
-* password reset followed by withdrawal
-* multiple failed logins
-* unusual transaction amount
-* device change before trade/transfer
-* rapid sequence of sensitive actions
+## Why I built this
 
-# Core Stack
-* Python
-* PySpark (reads raw events and computes suspciious patterns) --> user_risk_summary, alert_events
-* PostgreSQL
-* FastAPI
-* Docer Compose
-## thinking about
-* kafka
-* react
-* redis
-* kubernetes
-* redis
-* hadoop
+I wanted to build a project that demonstrates real event driven system design rather than a simple CRUD application. The project focuses on ingestion, streaming processing, feature engineering, storage design, and API serving.
 
-# data models
-  | Events.csv     | Description |
-| ----------- | ----------- |
-| event_id     |      |
-| user_id  |      |
-| event_type  |  login_sucess, login_failed, password_reset, trade, withdrawal, mfa_disabled, profile_change|
-| timestamp | ||
-|ip_address| ||
-|location| ||
-|device_id| ||
-|amount| ||
-|status| ||
+## How to Run
 
-# feature logic ideas
-## Rule 1
-More than 3 failed logins within 1 hour: high risk
-## Rule 2
-Password reset followed by withdrawal within 30 minutes: critical risk
-## Rule 3
-MFA disabled before profile change or withdrawal: critical risk
-## Rule 4
-Login from a new location and a new device: medium/high risk
-## Rule 5
-Withdrawal over threshold: medium risk (higher if combined with new device/location)
+### Prerequisites
 
-# Phase 1
+- Docker + Docker Desktop
+- Node.js (v18+)
+- npm
 
-## overview
-This pahse ingests raw account activity events, transforms them into user level risk features, computes a rule based risk score, stores the results in PostgreSQL, and exposes the processed insights through a FastAPI service.
+---
 
-## Architecture
- Raw CSV events flow through a Spark processing job, which computes user risk summaries and alert tables. These are written to PostgreSQL and served through REST endpoints.
-
-
-```
-CSV file
-   ↓
-Spark (parallel processing)
-   ↓ (via JDBC)
-Postgres (storage)
-   ↓ (via SQLAlchemy)
-FastAPI (API layer)
-   ↓ (via Uvicorn)
-Browser / client
-```
-
-## features
-
-- Detect repeated failed login behavior
-- Flag password reset and large withdrawal activity
-- Compute a user level risk score
-- Return high risk users through API endpoints
-
-## Tech stack
-- Python, PySpark, PostgreSQL, FastAPI, Docker Compose
-
-## How to run
+### Start backend services
 ```
 docker compose up --build
 ```
-## endpoints (port 8000)
- - GET /
- - GET /users
- - GET /alerts
- - GET /users/{user_id}
- - /docs 
+```
+http://localhost:8000/docs
+```
+* stopping system
+```
+docker compose down -v
+```
 
- # Phase 2
+### frontend dashboard
+```
+cd fraud-dashboard
+npm install
+npm run dev
+```
+```
+http://localhost:5173
+```
 
-### Fraud / risk features
-- repeated failed login detection
-- password reset detection
-- large withdrawal detection
-- MFA disabled detection
-- multiple device detection
-- multiple location detection
-- high event volume detection
-- password reset + withdrawal combination flag
 
-### Analytics features
-- risk overview summary
-- risk distribution across users
-- top risky users
-- risk/event patterns by location
-- event type distribution
 
 ## Architecture
 
-```text
-Raw CSV Events
-    ↓
-PySpark Processing / Feature Engineering
-    ↓
-PostgreSQL Curated Tables
-    ↓
-FastAPI Endpoints
-    ↓
-Operational / Analytical Insights
+**Flow:**
 
-## Core
-- GET /
-- GET /users
-- GET /alerts
-- GET /users/{user_id}
-## Analytics
-- GET /stats/overview
-- GET /stats/risk-distribution
-- GET /stats/top-users
-- GET /stats/by-location
-- GET /stats/event-types
+Event Producer → Kafka → Spark Structured Streaming → PostgreSQL → FastAPI → Redis → React Dashboard
 
- # Phase 3
+**Storage Layers:**
 
- - kafka proudcer/consumer
- - stream events instead of CSV-only
- ```
- Producer -> Kafka -> Spark Streaming -> Postgres -> FastAPI
- ```
- ## producers hypothetically
-web app -> sends login events
-mobile app -> sends trade events
-backend -> sends withdrawals
-
-## consumers
-Spark → fraud detection
-another service → analytics
-another service → alerts
-
-# Fraud Risk Platform — Phase 3B
-
-Phase 3B upgrades the project from a batch analytics pipeline into a streaming system that ingests live events from Kafka, processes them with Spark Structured Streaming, writes micro-batch results into PostgreSQL, and serves them through FastAPI.
-
-## What changed from Phase 3A
-
-### Phase 3A
-- Kafka producer sends events
-- Spark Structured Streaming reads from Kafka
-- Results are written to the console
-
-### Phase 3B
-- Kafka producer sends events continuously
-- Spark Structured Streaming reads from Kafka
-- Each micro-batch is processed with `foreachBatch`
-- Aggregated fraud summaries and alerts are written to PostgreSQL
-- FastAPI reads the streaming-backed tables
-
-## Architecture
+- `raw_events_stream` (append-only)
+- `user_risk_summary_stream` (upserted)
 
 ```text
-Producer -> Kafka -> Spark Structured Streaming -> PostgreSQL -> FastAPI
+                ┌──────────────────────┐
+                │   Random Producer    │
+                │  (simulated events)  │
+                └──────────┬───────────┘
+                           │
+                           ▼
+                ┌──────────────────────┐
+                │        Kafka         │
+                │   topic: fraud-events│
+                └──────────┬───────────┘
+                           │
+                           ▼
+                ┌──────────────────────┐
+                │ Spark Structured     │
+                │ Streaming            │
+                │ (micro-batch engine) │
+                └──────────┬───────────┘
+                           │
+          ┌────────────────┴────────────────┐
+          │                                 │
+          ▼                                 ▼
+┌──────────────────────┐         ┌────────────────────────┐
+│ raw_events_stream    │         │ user_risk_summary      │
+│ append-only table    │         │ upserted summary table │
+│ full event history   │         │ one row per user       │
+└──────────┬───────────┘         └──────────┬─────────────┘
+           │                                 │
+           └────────────────┬────────────────┘
+                            ▼
+                 ┌──────────────────────┐
+                 │      PostgreSQL      │
+                 │ source of truth      │
+                 └──────────┬───────────┘
+                            │
+                            ▼
+                 ┌──────────────────────┐
+                 │       FastAPI        │
+                 │  read/query layer    │
+                 └──────────┬───────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              │                           │
+              ▼                           ▼
+   ┌──────────────────────┐    ┌──────────────────────┐
+   │        Redis         │    │      Dashboard       │
+   │ hot endpoint cache   │    │ alerts/stats/users   │
+   └──────────────────────┘    └──────────────────────┘
 
- # Phase 4
- - Redis caching
- - maybe bakcground jobs
-## Phase 4
 
-Phase 4 upgrades the project from a streaming summary pipeline into a more production-like architecture with raw event persistence, summary upserts, and Redis-backed API caching.
 
-### New capabilities
-- appends streaming events into a persistent raw event table
-- recomputes user-level summaries from raw history
-- upserts user risk summaries by `user_id`
-- caches hot API responses using Redis
+---
 
-### Updated architecture
+[image of dashboard]{image\Fraud Dashboard.pdf}
 
-Producer -> Kafka -> Spark Structured Streaming -> PostgreSQL (raw + summary) -> FastAPI -> Redis
+## Core Concepts
 
-### Storage model
+### Event-driven architecture
+The system is built around continuous event ingestion instead of request-response flows.
 
-#### Raw events
+### Streaming vs batch
+- **Batch:** process fixed data once  
+- **Streaming:** continuously process incoming events  
+
+This system uses Spark Structured Streaming to process events in micro-batches.
+
+---
+
+## Storage Design
+
+### Raw Event Table (append-only)
+
 `raw_events_stream`
-- append-only
-- stores all ingested events
-- acts as event history / audit trail
 
-#### Summary table
+- stores every incoming event  
+- no updates or deletes  
+- acts as system-of-record  
+
+**Why append-only?**
+- preserves history  
+- enables recomputation  
+- simplifies ingestion  
+- avoids write conflicts  
+
+---
+
+### User Summary Table (upserted)
+
 `user_risk_summary_stream`
-- one row per user
-- updated via Postgres upsert
-- supports alert and user lookup endpoints
 
-### API updates
-- `GET /stream/users`
-- `GET /stream/alerts`
-- `GET /stream/users/{user_id}`
-- `GET /raw-events`
+- one row per user  
+- updated continuously  
+- contains engineered features  
 
-### Redis role
-Redis is used as a cache layer for hot endpoints. PostgreSQL remains the source of truth.
+**Why upsert?**
+- dashboard needs current state  
+- faster queries  
+- avoids scanning raw data repeatedly  
 
-### Why this phase matters
-This phase demonstrates:
-- append-only event storage
-- summary upsert patterns
-- separation of raw and curated data
-- API caching
-- a more realistic streaming data architecture
-# Phase 5
-- aws deployemnt
-- s3 + hosted DB + app deployment
+---
 
-# Phase 6
-- kubernetes deployment
-- help/ manifest ?
+## Feature Engineering
+
+The system derives fraud-related features such as:
+
+- failed login count  
+- password reset activity  
+- withdrawal activity  
+- large withdrawal detection  
+- event velocity  
+- suspicious action combinations  
+- total transaction amount  
+
+**Example logic:**
+- password reset + withdrawal → suspicious  
+- many failed logins → suspicious  
+- high-value withdrawal → suspicious  
+
+---
+
+## Risk Scoring
+
+A heuristic scoring system combines features into:
+
+- `risk_score` (numeric)  
+- `risk_level` (low / medium / high / critical)  
+
+---
+
+## API Layer (FastAPI)
+
+### Core endpoints
+- `GET /stream/users`  
+- `GET /stream/alerts`  
+- `GET /stream/users/{user_id}`  
+
+### Analytics endpoints
+- `GET /stats/overview`  
+- `GET /stats/top-users`  
+- `GET /stats/risk-distribution`  
+- `GET /stats/event-types`  
+
+### Raw data endpoints
+- `GET /raw-events`  
+- `GET /users/{user_id}/raw-events`  
+
+---
+
+## Caching (Redis)
+
+Redis is used to cache expensive queries:
+
+- overview stats  
+- top users  
+- alerts  
+
+**Why Redis?**
+- reduces latency  
+- reduces database load  
+- improves dashboard responsiveness  
+
+**Design choice:**  
+Redis is not the source of truth — PostgreSQL is.
+
+---
+
+## Frontend Dashboard
+
+Built with React + TypeScript.
+
+Displays:
+- overview metrics  
+- risk distribution  
+- event type distribution  
+- top risky users  
+- active alerts  
+- recent raw events  
+
+---
+
+## Key Design Decisions
+
+### Why Kafka?
+- decouples producers and consumers  
+- models event streams naturally  
+- supports scaling  
+
+### Why Spark Structured Streaming?
+- unified batch + streaming API  
+- expressive transformations  
+- micro-batch processing  
+
+### Why separate raw and summary tables?
+
+**Raw:**
+- historical truth  
+- debugging  
+- recomputation  
+
+**Summary:**
+- fast queries  
+- current state  
+- dashboard-friendly  
+
+### Why not compute everything on request?
+- scanning raw data is slow  
+- precomputed summaries are faster  
+
+### Why Redis?
+- caching improves performance  
+- reduces repeated computation  
+
+### Why UUID for events?
+- guarantees uniqueness  
+- avoids duplicate key errors  
+
+---
+
+## Tradeoffs
+
+### Simplicity vs scalability
+
+Current:
+- recomputes summaries from raw data  
+- simple and correct  
+
+At scale:
+- would switch to incremental updates  
+- more efficient but more complex  
+
+### Accuracy vs latency
+
+- caching introduces slight staleness  
+- significantly improves performance  
+
+---
+
+## What I Learned
+
+- event-driven system design  
+- streaming vs batch processing  
+- append-only vs upsert storage  
+- feature engineering for fraud detection  
+- API design for analytics systems  
+- caching with Redis  
+- debugging distributed systems  
+
+---
+
+## Future Improvements
+
+- rolling time-window fraud detection  
+- incremental summary updates  
+- alert notifications (Slack/email)  
+- authentication  
+- cloud deployment  
+- monitoring + observability  
+
+---
+
+## Resume Summary
+
+Built a streaming fraud-risk platform using Kafka, Spark Structured Streaming, PostgreSQL, FastAPI, Redis, and React to ingest simulated events, compute fraud features, and serve real-time analytics via APIs and a dashboard.
+
+---
+
+## Interview Questions & Answers
+
+### Why Kafka instead of direct API ingestion?
+Kafka decouples producers and consumers and enables scalable, asynchronous event processing.
+
+### What is a Kafka partition?
+A partition allows parallel consumption and maintains ordering within that partition.
+
+### What is an offset?
+An offset is the position of a message in a partition.
+
+### Why key by user_id?
+Ensures events for the same user stay ordered.
+
+### What is streaming vs batch?
+Streaming processes continuous data; batch processes static datasets.
+
+### What is a micro-batch?
+A small batch of events processed periodically by Spark.
+
+### What does append-only mean?
+New data is added, existing data is never modified.
+
+### What does upsert mean?
+Insert if new, update if existing.
+
+### Why separate raw and summary tables?
+Raw = history  
+Summary = current state  
+
+### What would break at scale?
+- recomputing full summaries  
+- single-node limits  
+- inefficient queries  
+
+### How would you scale this?
+- partition Kafka  
+- incremental updates  
+- distributed compute  
+- better caching  
+
+### What happens if Redis fails?
+System falls back to PostgreSQL.
+
+### What happens with duplicate events?
+Unique event IDs prevent duplicates; further deduping could be added.
+
+### Why not just SQL instead of Spark?
+Spark simplifies streaming + distributed processing.
+
+### Hardest part?
+Coordinating multiple services and ensuring data consistency.
+
+### What would you improve next?
+- time-window fraud detection  
+- anomaly detection  
+- production deployment  
+
+---
+
+## Final Summary
+
+This project demonstrates:
+
+- event-driven architecture  
+- streaming data processing  
+- fraud feature engineering  
+- append-only data modeling  
+- upserted serving tables  
+- caching strategies  
+- full-stack system design  
+- recent suspicious burst detection based on short-window activity
+
+It focuses on **systems thinking**, not just using tools.
