@@ -20,6 +20,16 @@ export interface RiskUser {
   risk_score: number;
   risk_level: string;
 }
+interface RecentBurst {
+  user_id: string;
+  recent_event_count: number;
+  recent_failed_login_count: number;
+  has_recent_password_reset: number;
+  has_recent_withdrawal: number;
+  burst_score: number;
+  burst_level: string;
+}
+
 
 export interface RiskDistributionItem {
   risk_level: string;
