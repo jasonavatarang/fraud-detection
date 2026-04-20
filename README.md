@@ -56,7 +56,7 @@ Event Producer → Kafka → Spark Structured Streaming → PostgreSQL → FastA
 - `raw_events_stream` (append-only)
 - `user_risk_summary_stream` (upserted)
 
-```text
+
                 ┌──────────────────────┐
                 │   Random Producer    │
                 │  (simulated events)  │
