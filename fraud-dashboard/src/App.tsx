@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import StatCard from "./components/StatCard";
-import AlertsTable from "./components/AlertsTable";
+import RecentBurstsTable from "./components/RecentBurstsTable";
 import TopUsersTable from "./components/TopUsersTable";
 import RiskDistributionChart from "./components/RiskDistributionChart";
 import DataTable from "./components/DataTable";
@@ -11,6 +11,7 @@ import type {
   RiskDistributionItem,
   RawEvent,
   EventTypeSummary,
+  RecentBurst
 } from "./types";
 import "./index.css";
 
@@ -24,31 +25,33 @@ export default function App() {
   const [rawEvents, setRawEvents] = useState<RawEvent[]>([]);
   const [eventTypes, setEventTypes] = useState<EventTypeSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recentBursts, setRecentBursts] = useState<any[]>([]);
 
   const fetchData = async () => {
     try {
       const [
-        overviewRes,
-        alertsRes,
-        topUsersRes,
-        riskDistributionRes,
-        rawEventsRes,
-        eventTypesRes,
-      ] = await Promise.all([
-        axios.get<OverviewStats[] | OverviewStats>(`${API_BASE}/stats/overview`),
-        axios.get<RiskUser[]>(`${API_BASE}/stream/alerts`),
-        axios.get<RiskUser[]>(`${API_BASE}/stats/top-users?limit=10`),
-        axios.get<RiskDistributionItem[]>(`${API_BASE}/stats/risk-distribution`),
-        axios.get<RawEvent[]>(`${API_BASE}/raw-events?limit=15`),
-        axios.get<EventTypeSummary[]>(`${API_BASE}/stats/event-types`),
-      ]);
+  overviewRes,
+  burstsRes,
+  topUsersRes,
+  riskDistributionRes,
+  rawEventsRes,
+  eventTypesRes,
+] = await Promise.all([
+  axios.get<OverviewStats[] | OverviewStats>(`${API_BASE}/stats/overview`),
+  axios.get<RecentBurst[]>(`${API_BASE}/stats/recent-bursts`),
+  axios.get<RiskUser[]>(`${API_BASE}/stats/top-users?limit=10`),
+  axios.get<RiskDistributionItem[]>(`${API_BASE}/stats/risk-distribution`),
+  axios.get<RawEvent[]>(`${API_BASE}/raw-events?limit=15`),
+  axios.get<EventTypeSummary[]>(`${API_BASE}/stats/event-types`),
+]);
 
       const overviewData = Array.isArray(overviewRes.data)
         ? overviewRes.data[0]
         : overviewRes.data;
 
       setOverview(overviewData ?? null);
-      setAlerts(alertsRes.data ?? []);
+      // setAlerts(alertsRes.data ?? []);
+      setRecentBursts(burstsRes.data ?? []);
       setTopUsers(topUsersRes.data ?? []);
       setRiskDistribution(riskDistributionRes.data ?? []);
       setRawEvents(rawEventsRes.data ?? []);
@@ -116,10 +119,10 @@ export default function App() {
           <TopUsersTable users={topUsers} />
         </div>
 
-        <div className="card">
-          <h2>Active Alerts</h2>
-          <AlertsTable alerts={alerts} />
-        </div>
+     <div className="card">
+  <h2>Recent Suspicious Bursts</h2>
+  <RecentBurstsTable bursts={recentBursts} />
+</div>
       </section>
 
       <section className="card">
