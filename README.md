@@ -109,7 +109,7 @@ Event Producer → Kafka → Spark Structured Streaming → PostgreSQL → FastA
 ```
 ---
 
-[image of dashboard]{image\dash_pic.png}
+![Fraud Dashboard](image/dash_pic.png)
 
 ## Core Concepts
 
