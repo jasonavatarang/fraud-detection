@@ -106,10 +106,10 @@ Event Producer → Kafka → Spark Structured Streaming → PostgreSQL → FastA
    └──────────────────────┘    └──────────────────────┘
 
 
-
+```
 ---
 
-[image of dashboard]{image\Fraud Dashboard.pdf}
+![Fraud Dashboard](image/dash_pic.png)
 
 ## Core Concepts
 
