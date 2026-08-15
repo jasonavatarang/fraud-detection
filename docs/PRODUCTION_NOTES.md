@@ -9,7 +9,16 @@
 - Redis improves dashboard/API latency without becoming the source of truth.
 - API query limits are bounded and parameterized.
 - `/health` and `/ready` expose service and dependency status.
+- Public labeled fraud CSVs can be profiled and benchmarked with a supervised baseline.
 - CI runs API tests and dashboard builds.
+
+## What Is Not Production Yet
+
+- The hosted demo uses simulated browser events so it can stay free.
+- The repo does not include private production fraud data.
+- There is no authentication, authorization, or analyst workflow management.
+- The streaming job does not use schema registry, migrations, or dead-letter queues yet.
+- The model benchmark uses a simple baseline and random split; regulated production systems need time-based validation, calibration, monitoring, and governance.
 
 ## Highest-Value Next Steps
 
@@ -20,10 +29,11 @@
 5. Add authentication and role-based dashboard access.
 6. Add rule versioning so alerts can be traced to the scoring logic that produced them.
 7. Add labeled outcomes and evaluate precision, recall, and false-positive rate.
+8. Promote the baseline model workflow into a versioned training pipeline with reproducible datasets, time-based splits, and model registry metadata.
 
 ## How This Could Become ML-Backed
 
-The current rules are a baseline. A realistic ML path would be:
+The current rules and standard-library logistic benchmark are baselines. A realistic ML path would be:
 
 1. Store analyst outcomes or confirmed chargeback/fraud labels.
 2. Build offline features from the immutable raw event history.

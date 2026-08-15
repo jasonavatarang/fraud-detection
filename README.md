@@ -13,6 +13,19 @@ The hosted demo is a free static GitHub Pages build. It simulates live events in
 
 ![Fraud Risk Platform Dashboard](docs/assets/live-dashboard-demo.png)
 
+## Production-Level Answer
+
+This is not a bank-production fraud platform yet. A real production deployment would need private data access, security review, authentication, monitoring, migrations, alert routing, model governance, incident response, and compliance controls.
+
+It is a production-ready portfolio project because it demonstrates the pieces interviewers usually care about:
+
+- A real streaming architecture instead of a notebook-only solution.
+- Replay-safe event ingestion and immutable raw event storage.
+- API health/readiness checks, bounded queries, cache fallback, and CI.
+- A public demo that works without paid infrastructure.
+- A real-data benchmark workflow for labeled fraud CSVs.
+- Clear tradeoffs and next steps instead of pretending the demo is a finished bank system.
+
 ## What This Demonstrates
 
 - Kafka-based event ingestion with replayable user activity events.
@@ -22,6 +35,7 @@ The hosted demo is a free static GitHub Pages build. It simulates live events in
 - Redis-backed FastAPI analytics endpoints with graceful cache fallback.
 - React + TypeScript dashboard for risk distribution, top users, suspicious bursts, and raw events.
 - Dataset analysis tooling that can profile Kaggle-style fraud CSVs and export replayable demo events.
+- Dependency-light model benchmarking for labeled fraud datasets.
 - GitHub Actions CI for API tests and dashboard builds.
 - Free public demo hosting through GitHub Pages.
 
@@ -172,7 +186,9 @@ npm run build:demo
 
 ## Dataset Analysis
 
-The repo can profile Kaggle-style fraud CSVs and project rows into replayable events for the streaming demo.
+The repo can profile Kaggle-style fraud CSVs, train a baseline fraud model, and project rows into replayable events for the streaming demo.
+
+The dataset files themselves are not committed because Kaggle/public datasets can be large and may have license or account requirements. Download them into `data/external/`, which is intentionally ignored by git.
 
 Profile a dataset and write a markdown report:
 
@@ -180,6 +196,36 @@ Profile a dataset and write a markdown report:
 python analysis/analyze_fraud_dataset.py \
   --csv data/external/paysim/PS_20174392719_1491204439457_log.csv \
   --report reports/paysim-analysis.md
+```
+
+Train a class-weighted logistic baseline and write `metrics.json`, `model.json`, and `report.md`:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/paysim/PS_20174392719_1491204439457_log.csv \
+  --output-dir models/paysim-baseline \
+  --label-column isFraud \
+  --max-rows 100000
+```
+
+For the Kaggle Credit Card Fraud dataset:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/creditcard/creditcard.csv \
+  --output-dir models/creditcard-baseline \
+  --label-column Class \
+  --max-rows 100000
+```
+
+For IEEE-CIS, start with the transaction table:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/ieee/train_transaction.csv \
+  --output-dir models/ieee-transaction-baseline \
+  --label-column isFraud \
+  --max-rows 100000
 ```
 
 Export replayable events:
@@ -274,8 +320,10 @@ I built a real-time fraud risk platform that ingests account events through Kafk
 ### Questions You Can Answer
 
 - **Is this a Kaggle project?** No. It can analyze Kaggle datasets, but the main value is the production-style streaming system around fraud detection.
+- **Does it use real data?** The hosted demo uses simulated data so it can run for free. The training and analysis scripts are built for real labeled public datasets once downloaded locally, including PaySim, Credit Card Fraud, and IEEE-CIS.
 - **Is the public demo running Kafka and Spark?** No. The public demo is a free static build with simulated live events. The full stack runs locally with Docker Compose.
 - **Why rules instead of ML?** Rules are an explainable baseline when labels are limited. With labels, the next step is supervised modeling, precision/recall evaluation, threshold tuning, and monitoring.
+- **Do you have an ML baseline now?** Yes. `analysis/train_fraud_baseline.py` trains a dependency-light, class-weighted logistic baseline and reports ROC-AUC, average precision, precision at top 1%, lift, threshold metrics, and feature weights.
 - **How do you handle replays?** Raw events are keyed by `event_id`, and inserts use conflict handling so duplicate replayed events do not duplicate history.
 - **What would you improve next?** Add migrations, schema validation, auth, metrics, dead-letter queues, alert routing, model/rule versioning, and production load tests.
 
@@ -289,6 +337,7 @@ analysis/             Fraud CSV profiler and dataset-to-events exporter
 data/                 Small deterministic demo events
 docs/                 Interview, production, dataset, and screenshot assets
 fraud-dashboard/      React + TypeScript dashboard
+models/               Ignored local model outputs from real-data training
 processing/           Spark Structured Streaming job
 producer/             Synthetic producer and CSV replay producer
 docker-compose.yml    Local full-stack orchestration

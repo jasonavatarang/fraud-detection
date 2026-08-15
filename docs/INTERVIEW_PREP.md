@@ -4,11 +4,14 @@
 
 I built a real-time fraud risk streaming platform that simulates account activity, ingests it through Kafka, processes it with Spark Structured Streaming, stores raw events and user summaries in PostgreSQL, serves analytics through FastAPI with Redis caching, and displays suspicious users in a React dashboard. The point was to show how fraud detection works as an operational system, not just as an offline notebook.
 
+I also added a real-data benchmark path: after downloading a labeled Kaggle-style fraud CSV, the repo can profile the data, train a class-weighted baseline model, report ROC-AUC and precision/recall style metrics, and export replayable events for the dashboard.
+
 ## Resume Bullets
 
 - Built a real-time fraud risk platform using Kafka, Spark Structured Streaming, PostgreSQL, Redis, FastAPI, and React to monitor account-takeover style activity.
 - Implemented explainable fraud-risk features such as failed-login velocity, password-reset plus withdrawal sequences, large withdrawals, MFA-disabled activity, and suspicious recent bursts.
 - Added replay-safe event ingestion with `event_id` primary keys and `ON CONFLICT DO NOTHING` handling to avoid duplicate raw events during Kafka replays or checkpoint resets.
+- Added a dependency-light supervised fraud baseline for labeled public datasets with ROC-AUC, average precision, precision at top 1%, lift, threshold tuning, and feature-weight reporting.
 - Hardened the API with bounded query parameters, parameterized SQL, cache fallback behavior, `/health` and `/ready` endpoints, and CI-backed tests.
 - Built a TypeScript dashboard showing live risk distribution, top risky users, recent suspicious bursts, and raw event history.
 
@@ -20,7 +23,7 @@ It is closer to a production systems project. Kaggle usually focuses on offline 
 
 ### Did you use real datasets?
 
-The repo can analyze Kaggle-style CSVs such as PaySim, Credit Card Fraud Detection, and IEEE-CIS. I use those datasets for offline profiling, class-imbalance analysis, and demo projection. I would not claim public synthetic or anonymized datasets prove production fraud performance; they are useful for showing analysis discipline and for building the next supervised modeling step.
+The repo can analyze and train on Kaggle-style CSVs such as PaySim, Credit Card Fraud Detection, and IEEE-CIS after downloading them locally. I do not commit those files because they are large and may require Kaggle account/license acceptance. I would not claim public synthetic or anonymized datasets prove production fraud performance, but they are useful for showing class imbalance, feature engineering, metric selection, and baseline model evaluation.
 
 ### Is the public demo actually running Kafka and Spark?
 
@@ -28,7 +31,11 @@ No. The public demo is a free static GitHub Pages build that simulates live even
 
 ### Why use rules instead of machine learning?
 
-Rules are a practical baseline when confirmed fraud labels are not available. They are explainable, quick to tune, and useful for analyst review. If labels existed, I would compare the rule baseline against supervised models using precision, recall, false-positive rate, alert volume, latency, and cost of missed fraud.
+Rules are a practical online baseline when confirmed fraud labels are not available. They are explainable, quick to tune, and useful for analyst review. When labels exist, this repo now has a supervised baseline script that compares model scores using ROC-AUC, average precision, precision at top 1%, threshold precision/recall, false-positive rate, and lift.
+
+### Is this production-level?
+
+It is production-ready as a portfolio system, not production-certified for a bank. Production-grade fraud systems need private data, security review, authentication, monitoring, migrations, alert routing, model governance, compliance controls, and incident response. This project demonstrates the architecture and engineering habits: streaming ingestion, replay-safe storage, explainable scoring, operational APIs, caching, CI, a public demo, and a real-data evaluation path.
 
 ### Why Kafka?
 
@@ -56,7 +63,7 @@ I would measure alert volume and analyst outcomes, tune thresholds by segment, a
 
 ### How would you make it more production-ready?
 
-I would add migrations, structured logging, metrics, tracing, dead-letter handling for malformed events, stronger schema validation, secrets management, load tests, retention policies, alert routing, and model/rule versioning.
+I would add migrations, structured logging, metrics, tracing, dead-letter handling for malformed events, stronger schema validation, secrets management, load tests, retention policies, alert routing, model/rule versioning, time-based validation, calibration, and analyst feedback loops.
 
 ### What real-world impact does this have?
 
@@ -64,8 +71,8 @@ The system targets account takeover and suspicious financial activity. In a real
 
 ## Honest Limitations To Say Out Loud
 
-- The data is synthetic, so this does not prove fraud-model accuracy.
-- The scoring logic is heuristic and explainable, not trained on real labels.
+- The bundled and hosted demo data is synthetic, so the demo itself does not prove fraud-model accuracy.
+- Public downloaded datasets can train the baseline model, but they still do not replace private production labels.
 - The stream job favors clarity over large-scale efficiency.
 - There is no authentication or role-based access control yet.
 - The database schema is created in code; production should use migrations.

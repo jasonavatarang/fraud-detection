@@ -60,6 +60,7 @@ fraud-dashboard/dist/
 data/external/
 data/imported/
 reports/
+models/
 
 # Translations
 *.mo
