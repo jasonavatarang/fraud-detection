@@ -1,398 +1,180 @@
-
 # Fraud Risk Streaming Platform
 
-A streaming fraud analytics system built with Kafka, Spark Structured Streaming, PostgreSQL, FastAPI, Redis, and React.
+A real-time fraud risk monitoring system for account security and financial activity events. The project is intentionally framed as a production-style streaming platform, not a Kaggle notebook: it emphasizes event ingestion, replay-safe storage, feature engineering, operational APIs, caching, CI, and a dashboard an analyst could use.
 
-## Overview
+![Fraud Dashboard](image/dash_pic.png)
 
-This project simulates account activity events, processes them as a live stream, computes user-level fraud risk, stores both raw and summarized data, and exposes operational analytics through APIs and a dashboard.
+## What It Demonstrates
 
-## Why I built this
+- Event-driven architecture with Kafka producers and consumers.
+- Spark Structured Streaming micro-batches for fraud-risk feature engineering.
+- Idempotent raw event persistence keyed by `event_id`, so replayed events do not duplicate history.
+- PostgreSQL as the source of truth for raw events and user risk summaries.
+- Redis-backed FastAPI query caching with graceful cache-failure behavior.
+- Bounded, parameterized API queries with health and readiness endpoints.
+- React + TypeScript dashboard for live risk distribution, suspicious bursts, top users, and raw events.
+- GitHub Actions CI for API tests and dashboard builds.
 
-I wanted to build a project that demonstrates real event driven system design rather than a simple CRUD application. The project focuses on ingestion, streaming processing, feature engineering, storage design, and API serving.
+## Architecture
 
-## How to Run
-
-### Prerequisites
-
-- Docker + Docker Desktop
-- Node.js (v18+)
-- npm
-
----
-
-### Start backend services
+```text
+Producer -> Kafka -> Spark Structured Streaming -> PostgreSQL -> FastAPI -> Redis -> React Dashboard
 ```
+
+Storage layers:
+
+- `raw_events_stream`: append-only event history keyed by `event_id`.
+- `user_risk_summary_stream`: current user-level fraud risk features and scores.
+- `recent_burst_activity`: short-window suspicious activity signals.
+
+## Fraud Signals
+
+The system scores account behavior using explainable rules:
+
+- Repeated failed logins.
+- Password reset followed by withdrawal.
+- Large withdrawals.
+- MFA disabled activity.
+- High event velocity.
+- Recent suspicious bursts over a configurable time window.
+
+This rule-based baseline is useful when labels are unavailable. A production team could later replace or supplement it with a supervised model once confirmed fraud labels and analyst feedback exist.
+
+## Quick Start
+
+Requirements:
+
+- Docker and Docker Compose.
+- Node.js 20+ for local dashboard development.
+
+## Free Hosted Demo
+
+The repo includes a zero-cost hosted demo mode for GitHub Pages:
+
+```text
+https://jasonavatarang.github.io/fraud-detection/
+```
+
+The hosted page is a static React build with simulated live events, so it can run on free GitHub Pages without paying for Kafka, Spark, PostgreSQL, Redis, or API hosting. The full production-style stack remains available locally through Docker Compose.
+
+After pushing to `main`, GitHub Actions runs `.github/workflows/pages.yml` and deploys the dashboard in `VITE_DEMO_MODE=true`. In the repository settings, set Pages to deploy from GitHub Actions if it is not already enabled.
+
+Start the streaming backend:
+
+```bash
 docker compose up --build
 ```
-```
+
+Open the API docs:
+
+```text
 http://localhost:8000/docs
 ```
-* stopping system
-```
-docker compose down -v
-```
 
-### frontend dashboard
-```
+Run the dashboard:
+
+```bash
 cd fraud-dashboard
 npm install
 npm run dev
 ```
-```
+
+Open:
+
+```text
 http://localhost:5173
 ```
 
+Replay a deterministic demo scenario:
 
-
-## Architecture
-
-**Flow:**
-
-Event Producer → Kafka → Spark Structured Streaming → PostgreSQL → FastAPI → Redis → React Dashboard
-
-**Storage Layers:**
-
-- `raw_events_stream` (append-only)
-- `user_risk_summary_stream` (upserted)
-
-```text
-                ┌──────────────────────┐
-                │   Random Producer    │
-                │  (simulated events)  │
-                └──────────┬───────────┘
-                           │
-                           ▼
-                ┌──────────────────────┐
-                │        Kafka         │
-                │   topic: fraud-events│
-                └──────────┬───────────┘
-                           │
-                           ▼
-                ┌──────────────────────┐
-                │ Spark Structured     │
-                │ Streaming            │
-                │ (micro-batch engine) │
-                └──────────┬───────────┘
-                           │
-          ┌────────────────┴────────────────┐
-          │                                 │
-          ▼                                 ▼
-┌──────────────────────┐         ┌────────────────────────┐
-│ raw_events_stream    │         │ user_risk_summary      │
-│ append-only table    │         │ upserted summary table │
-│ full event history   │         │ one row per user       │
-└──────────┬───────────┘         └──────────┬─────────────┘
-           │                                 │
-           └────────────────┬────────────────┘
-                            ▼
-                 ┌──────────────────────┐
-                 │      PostgreSQL      │
-                 │ source of truth      │
-                 └──────────┬───────────┘
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │       FastAPI        │
-                 │  read/query layer    │
-                 └──────────┬───────────┘
-                            │
-              ┌─────────────┴─────────────┐
-              │                           │
-              ▼                           ▼
-   ┌──────────────────────┐    ┌──────────────────────┐
-   │        Redis         │    │      Dashboard       │
-   │ hot endpoint cache   │    │ alerts/stats/users   │
-   └──────────────────────┘    └──────────────────────┘
-
-
+```bash
+docker compose --profile demo up demo-replay
 ```
----
 
-![Fraud Dashboard](image/dash_pic.png)
+Stop and remove local containers and volumes:
 
-## Core Concepts
+```bash
+docker compose down -v
+```
 
-### Event-driven architecture
-The system is built around continuous event ingestion instead of request-response flows.
+Local defaults are defined in `docker-compose.yml`. Copy `.env.example` only when you want to run individual services outside Compose or override defaults.
 
-### Streaming vs batch
-- **Batch:** process fixed data once  
-- **Streaming:** continuously process incoming events  
+## Dataset Analysis
 
-This system uses Spark Structured Streaming to process events in micro-batches.
+Profile a Kaggle-style fraud CSV and generate a markdown report:
 
----
+```bash
+python analysis/analyze_fraud_dataset.py \
+  --csv data/external/paysim/PS_20174392719_1491204439457_log.csv \
+  --report reports/paysim-analysis.md
+```
 
-## Storage Design
+Project dataset rows into replayable demo events:
 
-### Raw Event Table (append-only)
+```bash
+python analysis/analyze_fraud_dataset.py \
+  --csv data/external/paysim/PS_20174392719_1491204439457_log.csv \
+  --export-events data/imported/paysim_events.csv \
+  --export-limit 1000
+```
 
-`raw_events_stream`
+Then replay them:
 
-- stores every incoming event  
-- no updates or deletes  
-- acts as system-of-record  
+```bash
+python producer/replay_events.py --file data/imported/paysim_events.csv --bootstrap-servers localhost:9092
+```
 
-**Why append-only?**
-- preserves history  
-- enables recomputation  
-- simplifies ingestion  
-- avoids write conflicts  
+See [docs/DATASETS_AND_DEMO.md](docs/DATASETS_AND_DEMO.md) for Kaggle download commands, demo workflow, and honest interview framing.
 
----
+## API Endpoints
 
-### User Summary Table (upserted)
+Health and readiness:
 
-`user_risk_summary_stream`
+- `GET /health`
+- `GET /ready`
 
-- one row per user  
-- updated continuously  
-- contains engineered features  
+Operational views:
 
-**Why upsert?**
-- dashboard needs current state  
-- faster queries  
-- avoids scanning raw data repeatedly  
+- `GET /stream/users`
+- `GET /stream/alerts`
+- `GET /stream/users/{user_id}`
+- `GET /stats/overview`
+- `GET /stats/top-users?limit=10`
+- `GET /stats/risk-distribution`
+- `GET /stats/event-types`
+- `GET /stats/recent-bursts`
+- `GET /raw-events?limit=20`
+- `GET /users/{user_id}/raw-events?limit=20`
 
----
+## Testing
 
-## Feature Engineering
+Run API tests:
 
-The system derives fraud-related features such as:
+```bash
+python -m pip install -r api/requirements-dev.txt
+python -m pytest api/tests
+```
 
-- failed login count  
-- password reset activity  
-- withdrawal activity  
-- large withdrawal detection  
-- event velocity  
-- suspicious action combinations  
-- total transaction amount  
+Build the dashboard:
 
-**Example logic:**
-- password reset + withdrawal → suspicious  
-- many failed logins → suspicious  
-- high-value withdrawal → suspicious  
+```bash
+npm ci --prefix fraud-dashboard
+npm run build --prefix fraud-dashboard
+```
 
----
+CI runs both checks on pull requests and pushes to `main`.
 
-## Risk Scoring
+## Resume Framing
 
-A heuristic scoring system combines features into:
+Suggested resume bullet:
 
-- `risk_score` (numeric)  
-- `risk_level` (low / medium / high / critical)  
+> Built a real-time fraud risk streaming platform using Kafka, Spark Structured Streaming, PostgreSQL, Redis, FastAPI, and React; implemented replay-safe event ingestion, explainable risk scoring, cached analytics APIs, and a live analyst dashboard with CI-backed tests/builds.
 
----
+Strong interview framing:
 
-## API Layer (FastAPI)
+- This is a systems project first, not a model-accuracy project.
+- The core problem is making risky account behavior visible quickly and explainably.
+- The design keeps raw events immutable so scoring logic can be changed and recomputed.
+- The current scoring is a transparent baseline; the next version would add labels, precision/recall evaluation, threshold tuning, analyst feedback, and model monitoring.
 
-### Core endpoints
-- `GET /stream/users`  
-- `GET /stream/alerts`  
-- `GET /stream/users/{user_id}`  
-
-### Analytics endpoints
-- `GET /stats/overview`  
-- `GET /stats/top-users`  
-- `GET /stats/risk-distribution`  
-- `GET /stats/event-types`  
-
-### Raw data endpoints
-- `GET /raw-events`  
-- `GET /users/{user_id}/raw-events`  
-
----
-
-## Caching (Redis)
-
-Redis is used to cache expensive queries:
-
-- overview stats  
-- top users  
-- alerts  
-
-**Why Redis?**
-- reduces latency  
-- reduces database load  
-- improves dashboard responsiveness  
-
-**Design choice:**  
-Redis is not the source of truth — PostgreSQL is.
-
----
-
-## Frontend Dashboard
-
-Built with React + TypeScript.
-
-Displays:
-- overview metrics  
-- risk distribution  
-- event type distribution  
-- top risky users  
-- active alerts  
-- recent raw events  
-
----
-
-## Key Design Decisions
-
-### Why Kafka?
-- decouples producers and consumers  
-- models event streams naturally  
-- supports scaling  
-
-### Why Spark Structured Streaming?
-- unified batch + streaming API  
-- expressive transformations  
-- micro-batch processing  
-
-### Why separate raw and summary tables?
-
-**Raw:**
-- historical truth  
-- debugging  
-- recomputation  
-
-**Summary:**
-- fast queries  
-- current state  
-- dashboard-friendly  
-
-### Why not compute everything on request?
-- scanning raw data is slow  
-- precomputed summaries are faster  
-
-### Why Redis?
-- caching improves performance  
-- reduces repeated computation  
-
-### Why UUID for events?
-- guarantees uniqueness  
-- avoids duplicate key errors  
-
----
-
-## Tradeoffs
-
-### Simplicity vs scalability
-
-Current:
-- recomputes summaries from raw data  
-- simple and correct  
-
-At scale:
-- would switch to incremental updates  
-- more efficient but more complex  
-
-### Accuracy vs latency
-
-- caching introduces slight staleness  
-- significantly improves performance  
-
----
-
-## What I Learned
-
-- event-driven system design  
-- streaming vs batch processing  
-- append-only vs upsert storage  
-- feature engineering for fraud detection  
-- API design for analytics systems  
-- caching with Redis  
-- debugging distributed systems  
-
----
-
-## Future Improvements
-
-- rolling time-window fraud detection  
-- incremental summary updates  
-- alert notifications (Slack/email)  
-- authentication  
-- cloud deployment  
-- monitoring + observability  
-
----
-
-## Resume Summary
-
-Built a streaming fraud-risk platform using Kafka, Spark Structured Streaming, PostgreSQL, FastAPI, Redis, and React to ingest simulated events, compute fraud features, and serve real-time analytics via APIs and a dashboard.
-
----
-
-## Interview Questions & Answers
-
-### Why Kafka instead of direct API ingestion?
-Kafka decouples producers and consumers and enables scalable, asynchronous event processing.
-
-### What is a Kafka partition?
-A partition allows parallel consumption and maintains ordering within that partition.
-
-### What is an offset?
-An offset is the position of a message in a partition.
-
-### Why key by user_id?
-Ensures events for the same user stay ordered.
-
-### What is streaming vs batch?
-Streaming processes continuous data; batch processes static datasets.
-
-### What is a micro-batch?
-A small batch of events processed periodically by Spark.
-
-### What does append-only mean?
-New data is added, existing data is never modified.
-
-### What does upsert mean?
-Insert if new, update if existing.
-
-### Why separate raw and summary tables?
-Raw = history  
-Summary = current state  
-
-### What would break at scale?
-- recomputing full summaries  
-- single-node limits  
-- inefficient queries  
-
-### How would you scale this?
-- partition Kafka  
-- incremental updates  
-- distributed compute  
-- better caching  
-
-### What happens if Redis fails?
-System falls back to PostgreSQL.
-
-### What happens with duplicate events?
-Unique event IDs prevent duplicates; further deduping could be added.
-
-### Why not just SQL instead of Spark?
-Spark simplifies streaming + distributed processing.
-
-### Hardest part?
-Coordinating multiple services and ensuring data consistency.
-
-### What would you improve next?
-- time-window fraud detection  
-- anomaly detection  
-- production deployment  
-
----
-
-## Final Summary
-
-This project demonstrates:
-
-- event-driven architecture  
-- streaming data processing  
-- fraud feature engineering  
-- append-only data modeling  
-- upserted serving tables  
-- caching strategies  
-- full-stack system design  
-- recent suspicious burst detection based on short-window activity
-
-It focuses on **systems thinking**, not just using tools.
+See [docs/INTERVIEW_PREP.md](docs/INTERVIEW_PREP.md), [docs/PRODUCTION_NOTES.md](docs/PRODUCTION_NOTES.md), and [docs/DATASETS_AND_DEMO.md](docs/DATASETS_AND_DEMO.md) for deeper talking points, demo steps, and next-step ideas.

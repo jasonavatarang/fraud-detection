@@ -3,12 +3,12 @@ interface Column<T> {
   label: string;
 }
 
-interface DataTableProps<T extends Record<string, unknown>> {
+interface DataTableProps<T extends object> {
   rows: T[];
   columns: Column<T>[];
 }
 
-export default function DataTable<T extends Record<string, unknown>>({
+export default function DataTable<T extends object>({
   rows,
   columns,
 }: DataTableProps<T>) {

@@ -51,6 +51,16 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# JavaScript dependencies and build output
+node_modules/
+fraud-dashboard/node_modules/
+fraud-dashboard/dist/
+
+# Downloaded datasets and generated analysis artifacts
+data/external/
+data/imported/
+reports/
+
 # Translations
 *.mo
 *.pot

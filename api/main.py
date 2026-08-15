@@ -1,13 +1,64 @@
-import os
 import json
+import logging
+import os
+from decimal import Decimal
+from typing import Any
+
 import redis
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from sqlalchemy import create_engine, text
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from decimal import Decimal
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
-def make_json_safe(value):
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "frauddb")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "10"))
+DASHBOARD_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DASHBOARD_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
+DATABASE_URL = (
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
+    f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+)
+
+engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
+redis_client = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    decode_responses=True,
+    socket_timeout=1,
+    socket_connect_timeout=1,
+)
+
+app = FastAPI(
+    title="Fraud Risk Platform API",
+    version="1.0.0",
+    description="Operational analytics API for streaming account-takeover and fraud-risk signals.",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=DASHBOARD_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def make_json_safe(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
     if isinstance(value, list):
@@ -15,57 +66,76 @@ def make_json_safe(value):
     if isinstance(value, dict):
         return {k: make_json_safe(v) for k, v in value.items()}
     return value
-load_dotenv()
 
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "frauddb")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
-DATABASE_URL = (
-    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
-    f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
-
-engine = create_engine(DATABASE_URL, future=True)
-
-redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
-
-app = FastAPI(title="Fraud Risk Platform - Phase 4")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-def get_cached_or_query(cache_key, sql, params=None, ttl=10):
+def get_cached_or_query(
+    cache_key: str,
+    sql: str,
+    params: dict[str, Any] | None = None,
+    ttl: int = CACHE_TTL_SECONDS,
+) -> list[dict[str, Any]]:
     try:
         cached = redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
-    except Exception as e:
-        print(f"Redis read failed for {cache_key}: {e}")
+    except redis.RedisError as exc:
+        logger.warning("Redis read failed for %s: %s", cache_key, exc)
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(sql), params or {}).mappings().all()
-        result = [dict(row) for row in rows]
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql), params or {}).mappings().all()
+            result = [dict(row) for row in rows]
+    except SQLAlchemyError as exc:
+        logger.exception("Database query failed for %s", cache_key)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Fraud analytics database is unavailable",
+        ) from exc
 
     result = make_json_safe(result)
 
     try:
         redis_client.setex(cache_key, ttl, json.dumps(result))
-    except Exception as e:
-        print(f"Redis write failed for {cache_key}: {e}")
+    except redis.RedisError as exc:
+        logger.warning("Redis write failed for %s: %s", cache_key, exc)
 
     return result
 
 
 @app.get("/")
 def root():
-    return {"message": "Fraud Risk Platform API is running"}
+    return {"message": "Fraud Risk Platform API is running", "docs": "/docs"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "fraud-risk-api"}
+
+
+@app.get("/ready")
+def readiness():
+    checks = {"database": False, "redis": False}
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = True
+    except SQLAlchemyError as exc:
+        logger.warning("Readiness database check failed: %s", exc)
+
+    try:
+        checks["redis"] = bool(redis_client.ping())
+    except redis.RedisError as exc:
+        logger.warning("Readiness Redis check failed: %s", exc)
+
+    if not checks["database"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unavailable", "checks": checks},
+        )
+
+    status_value = "ready" if checks["redis"] else "degraded"
+    return {"status": status_value, "checks": checks}
 
 
 @app.get("/stream/users")
@@ -103,22 +173,24 @@ def get_stream_user(user_id: str):
         WHERE user_id = :user_id
         """,
         {"user_id": user_id},
-        ttl=5
+        ttl=5,
     )
 
 
 @app.get("/raw-events")
-def get_raw_events(limit: int = 20):
+def get_raw_events(limit: int = Query(default=20, ge=1, le=200)):
     return get_cached_or_query(
         f"raw_events_{limit}",
-        f"""
+        """
         SELECT *
         FROM raw_events_stream
         ORDER BY timestamp DESC
-        LIMIT {limit}
+        LIMIT :limit
         """,
-        ttl=5
+        {"limit": limit},
+        ttl=5,
     )
+
 
 @app.get("/stats/overview")
 def stats_overview():
@@ -135,6 +207,7 @@ def stats_overview():
         """
     )
 
+
 @app.get("/stats/risk-distribution")
 def risk_distribution():
     return get_cached_or_query(
@@ -147,32 +220,33 @@ def risk_distribution():
         """
     )
 
+
 @app.get("/users/{user_id}/raw-events")
-def user_raw_events(user_id: str):
+def user_raw_events(user_id: str, limit: int = Query(default=20, ge=1, le=200)):
     return get_cached_or_query(
-        f"user_events_{user_id}",
+        f"user_events_{user_id}_{limit}",
         """
         SELECT *
         FROM raw_events_stream
         WHERE user_id = :user_id
         ORDER BY timestamp DESC
-        LIMIT 20
+        LIMIT :limit
         """,
-        {"user_id": user_id}
+        {"user_id": user_id, "limit": limit},
     )
 
 
-
 @app.get("/stats/top-users")
-def top_users(limit: int = 10):
+def top_users(limit: int = Query(default=10, ge=1, le=100)):
     return get_cached_or_query(
         f"top_users_{limit}",
-        f"""
+        """
         SELECT *
         FROM user_risk_summary_stream
         ORDER BY risk_score DESC
-        LIMIT {limit}
-        """
+        LIMIT :limit
+        """,
+        {"limit": limit},
     )
 
 
@@ -187,6 +261,7 @@ def event_types():
         ORDER BY count DESC
         """
     )
+
 
 @app.get("/stats/recent-bursts")
 def recent_bursts():

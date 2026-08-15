@@ -1,0 +1,16 @@
+event_id,user_id,event_type,timestamp,ip_address,location,device_id,amount,status
+demo-0001,3001,login_success,2026-01-01T12:00:00+00:00,203.0.113.11,Miami,device_a,0,success
+demo-0002,3002,login_success,2026-01-01T12:00:05+00:00,203.0.113.22,Austin,device_c,0,success
+demo-0003,3001,trade,2026-01-01T12:00:10+00:00,203.0.113.11,Miami,device_a,425.50,success
+demo-0004,3003,login_success,2026-01-01T12:00:15+00:00,203.0.113.33,Chicago,device_d,0,success
+demo-0005,3004,login_success,2026-01-01T12:00:20+00:00,203.0.113.44,Boston,device_f,0,success
+demo-0006,3005,trade,2026-01-01T12:00:25+00:00,203.0.113.55,Seattle,device_g,880.25,success
+demo-1001,3002,login_failed,2026-01-01T12:01:00+00:00,203.0.113.201,New York,device_901,0,failed
+demo-1002,3002,login_failed,2026-01-01T12:01:03+00:00,203.0.113.201,New York,device_901,0,failed
+demo-1003,3002,password_reset,2026-01-01T12:01:06+00:00,203.0.113.201,New York,device_901,0,success
+demo-1004,3002,withdrawal,2026-01-01T12:01:12+00:00,203.0.113.201,New York,device_901,9500,success
+demo-2001,3004,mfa_disabled,2026-01-01T12:02:00+00:00,203.0.113.244,Atlanta,device_944,0,success
+demo-2002,3004,password_reset,2026-01-01T12:02:05+00:00,203.0.113.244,Atlanta,device_944,0,success
+demo-2003,3004,withdrawal,2026-01-01T12:02:10+00:00,203.0.113.244,Atlanta,device_944,12500,success
+demo-3001,3001,withdrawal,2026-01-01T12:03:00+00:00,203.0.113.11,Miami,device_a,250,success
+demo-3002,3003,trade,2026-01-01T12:03:05+00:00,203.0.113.33,Chicago,device_d,1200,success
