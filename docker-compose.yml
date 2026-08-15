@@ -35,10 +35,21 @@ services:
     image: python:3.11-slim
     container_name: fraud-spark-stream
     working_dir: /app
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: frauddb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_TOPIC: fraud-events
     volumes:
       - ./processing:/app/processing
     depends_on:
-      - kafka
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     command: >
       bash -c "sleep 15 &&
                apt-get update &&
@@ -50,6 +61,12 @@ services:
     image: python:3.11-slim
     container_name: fraud-producer
     working_dir: /app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_TOPIC: fraud-events
+      FRAUD_BURST_PROBABILITY: "0.2"
+      SEND_MIN_SECONDS: "1"
+      SEND_MAX_SECONDS: "3"
     volumes:
       - ./producer:/app/producer
     depends_on:
@@ -59,29 +76,64 @@ services:
                pip install --no-cache-dir -r producer/requirements.txt &&
                python producer/send_events.py"
 
+  demo-replay:
+    image: python:3.11-slim
+    container_name: fraud-demo-replay
+    working_dir: /app
+    profiles:
+      - demo
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_TOPIC: fraud-events
+    volumes:
+      - ./producer:/app/producer
+      - ./data:/app/data
+    depends_on:
+      kafka:
+        condition: service_started
+    command: >
+      bash -c "sleep 10 &&
+               pip install --no-cache-dir -r producer/requirements.txt &&
+               python producer/replay_events.py --file data/demo_events.csv --bootstrap-servers kafka:9093 --delay-seconds 0.5"
+
   redis:
     image: redis:7
     container_name: fraud-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     image: python:3.11-slim
     container_name: fraud-api
     working_dir: /app
-    env_file:
-      - .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: frauddb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DASHBOARD_ORIGINS: http://localhost:5173
     volumes:
       - ./api:/app/api
-      - ./.env:/app/.env
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     command: >
       bash -c "pip install --no-cache-dir -r api/requirements.txt &&
                uvicorn api.main:app --host 0.0.0.0 --port 8000"
-
-    

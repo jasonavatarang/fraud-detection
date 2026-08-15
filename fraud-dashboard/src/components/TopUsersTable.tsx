@@ -4,6 +4,12 @@ interface TopUsersTableProps {
   users: RiskUser[];
 }
 
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
 export default function TopUsersTable({ users }: TopUsersTableProps) {
   if (!users.length) return <p>No users found.</p>;
 
@@ -24,9 +30,13 @@ export default function TopUsersTable({ users }: TopUsersTableProps) {
             <tr key={`${user.user_id}-${idx}`}>
               <td>{user.user_id}</td>
               <td>{user.risk_score}</td>
-              <td>{user.risk_level}</td>
+              <td>
+                <span className={`risk-pill risk-${user.risk_level}`}>
+                  {user.risk_level}
+                </span>
+              </td>
               <td>{user.failed_login_count}</td>
-              <td>{user.total_amount}</td>
+              <td>{currencyFormatter.format(user.total_amount)}</td>
             </tr>
           ))}
         </tbody>

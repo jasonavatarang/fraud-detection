@@ -20,7 +20,7 @@ export interface RiskUser {
   risk_score: number;
   risk_level: string;
 }
-interface RecentBurst {
+export interface RecentBurst {
   user_id: string;
   recent_event_count: number;
   recent_failed_login_count: number;
@@ -51,4 +51,13 @@ export interface RawEvent {
 export interface EventTypeSummary {
   event_type: string;
   count: number;
+}
+
+export interface DashboardData {
+  overview: OverviewStats | null;
+  topUsers: RiskUser[];
+  riskDistribution: RiskDistributionItem[];
+  rawEvents: RawEvent[];
+  eventTypes: EventTypeSummary[];
+  recentBursts: RecentBurst[];
 }

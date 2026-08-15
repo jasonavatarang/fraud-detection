@@ -26,7 +26,7 @@ export default function RiskDistributionChart({
           <XAxis dataKey="risk_level" />
           <YAxis />
           <Tooltip />
-          <Bar dataKey="count" />
+          <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

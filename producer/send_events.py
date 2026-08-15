@@ -1,12 +1,24 @@
 import json
+import os
 import random
 import time
 from datetime import datetime, timezone
 from kafka import KafkaProducer
 import uuid
 
+
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9093")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "fraud-events")
+FRAUD_BURST_PROBABILITY = float(os.getenv("FRAUD_BURST_PROBABILITY", "0.2"))
+SEND_MIN_SECONDS = float(os.getenv("SEND_MIN_SECONDS", "1"))
+SEND_MAX_SECONDS = float(os.getenv("SEND_MAX_SECONDS", "3"))
+RANDOM_SEED = os.getenv("RANDOM_SEED")
+
+if RANDOM_SEED:
+    random.seed(RANDOM_SEED)
+
 producer = KafkaProducer(
-    bootstrap_servers="kafka:9093",
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
     value_serializer=lambda v: json.dumps(v).encode("utf-8")
 )
 
@@ -138,21 +150,21 @@ def main():
     while True:
         user_id = random.choice(list(user_profiles.keys()))
 
-        if random.random() < 0.2:
+        if random.random() < FRAUD_BURST_PROBABILITY:
             events = generate_fraud_burst(user_id)
             print(f"Sending fraud burst for user {user_id}")
             for event in events:
                 # Keying by user_id helps preserve per user ordering in Kafka partitions.
-                producer.send("fraud-events", key=user_id.encode("utf-8"), value=event)
+                producer.send(KAFKA_TOPIC, key=user_id.encode("utf-8"), value=event)
                 print("Sent:", event)
-                time.sleep(1)
+                time.sleep(SEND_MIN_SECONDS)
         else:
             event = generate_normal_event(user_id)
-            producer.send("fraud-events", key=user_id.encode("utf-8"), value=event)
+            producer.send(KAFKA_TOPIC, key=user_id.encode("utf-8"), value=event)
             print("Sent:", event)
 
         producer.flush()
-        time.sleep(random.uniform(1, 3))
+        time.sleep(random.uniform(SEND_MIN_SECONDS, SEND_MAX_SECONDS))
 
 
 if __name__ == "__main__":

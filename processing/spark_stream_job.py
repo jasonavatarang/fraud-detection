@@ -1,6 +1,7 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
+from psycopg2.extras import execute_batch
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
@@ -9,7 +10,8 @@ from pyspark.sql.functions import (
     count,
     sum as spark_sum,
     max as spark_max,
-    to_timestamp, current_timestamp, expr
+    to_timestamp,
+    expr
 )
 from pyspark.sql.types import (
     StructType,
@@ -26,6 +28,13 @@ DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "frauddb")
 DB_USER = os.getenv("POSTGRES_USER", "postgres")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9093")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "fraud-events")
+SPARK_CHECKPOINT_LOCATION = os.getenv(
+    "SPARK_CHECKPOINT_LOCATION",
+    "/tmp/fraud-risk-checkpoint-phase-4",
+)
+RECENT_WINDOW_MINUTES = int(os.getenv("RECENT_WINDOW_MINUTES", "5"))
 
 JDBC_URL = f"jdbc:postgresql://{DB_HOST}:{DB_PORT}/{DB_NAME}"
 JDBC_PROPERTIES = {
@@ -106,6 +115,57 @@ def ensure_tables():
             burst_level TEXT
         )
     """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_raw_events_stream_user_timestamp
+        ON raw_events_stream (user_id, timestamp DESC)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_raw_events_stream_event_type
+        ON raw_events_stream (event_type)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_risk_summary_stream_risk
+        ON user_risk_summary_stream (risk_level, risk_score DESC)
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def insert_raw_events(rows):
+    if not rows:
+        return
+
+    conn = get_pg_connection()
+    cur = conn.cursor()
+
+    insert_sql = """
+        INSERT INTO raw_events_stream (
+            event_id,
+            user_id,
+            event_type,
+            timestamp,
+            ip_address,
+            location,
+            device_id,
+            amount,
+            status
+        )
+        VALUES (
+            %(event_id)s,
+            %(user_id)s,
+            %(event_type)s,
+            %(timestamp)s,
+            %(ip_address)s,
+            %(location)s,
+            %(device_id)s,
+            %(amount)s,
+            %(status)s
+        )
+        ON CONFLICT (event_id) DO NOTHING
+    """
+
+    execute_batch(cur, insert_sql, rows, page_size=500)
     conn.commit()
     cur.close()
     conn.close()
@@ -216,16 +276,11 @@ def write_to_postgres(batch_df, batch_id):
 
     ensure_tables()
 
-    # 1) Append raw events
-    batch_df.write.jdbc(
-        url=JDBC_URL,
-        table="raw_events_stream",
-        mode="append",
-        properties=JDBC_PROPERTIES,
-    )
-    
+    # Idempotent raw writes keep Kafka replays/checkpoint resets from duplicating history.
+    raw_rows = [row.asDict() for row in batch_df.dropDuplicates(["event_id"]).collect()]
+    insert_raw_events(raw_rows)
 
-    # 2) Recompute summaries from full raw event history
+    # Recompute summaries from full raw event history.
     spark = batch_df.sparkSession
     raw_df = spark.read.jdbc(
         url=JDBC_URL,
@@ -235,9 +290,10 @@ def write_to_postgres(batch_df, batch_id):
 
     raw_df = raw_df.withColumn("event_ts", to_timestamp(col("timestamp")))
 
-    recent_df = raw_df.filter(
-        col("event_ts") >= expr("current_timestamp() - INTERVAL 5 MINUTES")
+    recent_window_expr = (
+        f"current_timestamp() - INTERVAL {RECENT_WINDOW_MINUTES} MINUTES"
     )
+    recent_df = raw_df.filter(col("event_ts") >= expr(recent_window_expr))
 
     enriched_raw = (
         raw_df
@@ -345,8 +401,8 @@ def main() -> None:
     kafka_df = (
         spark.readStream
         .format("kafka")
-        .option("kafka.bootstrap.servers", "kafka:9093")
-        .option("subscribe", "fraud-events")
+        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
+        .option("subscribe", KAFKA_TOPIC)
         .option("startingOffsets", "earliest")
         .load()
     )
@@ -356,13 +412,14 @@ def main() -> None:
         .selectExpr("CAST(value AS STRING)")
         .select(from_json(col("value"), schema).alias("data"))
         .select("data.*")
+        .where(col("event_id").isNotNull() & col("user_id").isNotNull())
     )
 
     query = (
         parsed_df.writeStream
         .outputMode("append")
         .foreachBatch(write_to_postgres)
-        .option("checkpointLocation", "/tmp/fraud-risk-checkpoint-phase-4")
+        .option("checkpointLocation", SPARK_CHECKPOINT_LOCATION)
         .start()
     )
 

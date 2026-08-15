@@ -1,3 +1,8 @@
+import type { RecentBurst } from "../types";
+
+interface RecentBurstsTableProps {
+  bursts: RecentBurst[];
+}
 
 export default function RecentBurstsTable({ bursts }: RecentBurstsTableProps) {
   if (!bursts.length) return <p>No suspicious bursts detected.</p>;
@@ -21,7 +26,11 @@ export default function RecentBurstsTable({ bursts }: RecentBurstsTableProps) {
             <tr key={`${burst.user_id}-${idx}`}>
               <td>{burst.user_id}</td>
               <td>{burst.burst_score}</td>
-              <td>{burst.burst_level}</td>
+              <td>
+                <span className={`risk-pill risk-${burst.burst_level}`}>
+                  {burst.burst_level}
+                </span>
+              </td>
               <td>{burst.recent_event_count}</td>
               <td>{burst.recent_failed_login_count}</td>
               <td>{burst.has_recent_password_reset ? "Yes" : "No"}</td>
