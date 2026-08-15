@@ -5,6 +5,7 @@ This repo now supports two demo paths:
 1. A deterministic live demo using `data/demo_events.csv`.
 2. Offline analysis of Kaggle-style fraud CSVs, with optional export into replayable dashboard events.
 3. A free hosted GitHub Pages demo with simulated live events.
+4. A dependency-light supervised baseline for labeled fraud CSVs.
 
 ## Free Hosted Demo
 
@@ -98,6 +99,7 @@ kaggle datasets download -d mlg-ulb/creditcardfraud -p data/external/creditcard 
 ```bash
 mkdir -p data/external/ieee
 kaggle competitions download -c ieee-fraud-detection -p data/external/ieee
+unzip data/external/ieee/ieee-fraud-detection.zip -d data/external/ieee
 ```
 
 Downloaded data under `data/external/` is ignored by Git.
@@ -119,6 +121,46 @@ The analyzer auto-detects common columns such as:
 - `type`, `ProductCD`, `transaction_type`
 - `step`, `Time`, `TransactionDT`, `timestamp`
 - `nameOrig`, `card1`, `customer_id`, `user_id`
+
+## Train A Real-Data Baseline
+
+After downloading a labeled fraud dataset, train a class-weighted logistic baseline:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/paysim/PS_20174392719_1491204439457_log.csv \
+  --output-dir models/paysim-baseline \
+  --label-column isFraud \
+  --max-rows 100000
+```
+
+For the Kaggle Credit Card Fraud dataset:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/creditcard/creditcard.csv \
+  --output-dir models/creditcard-baseline \
+  --label-column Class \
+  --max-rows 100000
+```
+
+For IEEE-CIS, begin with the transaction table:
+
+```bash
+python analysis/train_fraud_baseline.py \
+  --csv data/external/ieee/train_transaction.csv \
+  --output-dir models/ieee-transaction-baseline \
+  --label-column isFraud \
+  --max-rows 100000
+```
+
+The trainer writes:
+
+- `metrics.json`: ROC-AUC, average precision, precision at top 1%, lift, threshold metrics, and confusion matrix.
+- `model.json`: standard-library logistic regression weights and preprocessing metadata.
+- `report.md`: interview-friendly markdown summary.
+
+This is intentionally a baseline, not a winning Kaggle solution. It proves the project can move from raw labeled data to measurable fraud detection performance without depending on heavyweight notebook tooling.
 
 ## Export Dataset Rows Into Demo Events
 
@@ -151,4 +193,4 @@ If asked about Kaggle:
 
 If asked what would make the analysis stronger:
 
-> I would add a real modeling pipeline with train/test splits, leakage checks, PR-AUC, precision/recall at alert-volume targets, calibration, and analyst feedback labels. The current dataset tool is the bridge from raw public CSVs into that next step.
+> I added a supervised baseline with train/test splits, class weighting, ROC-AUC, average precision, precision at alert-volume targets, lift, threshold selection, and feature weights. The next step would be stronger leakage checks, time-based validation, calibration, model monitoring, and analyst feedback labels.
